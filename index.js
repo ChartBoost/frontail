@@ -121,11 +121,20 @@ if (program.daemonize) {
    * When connected send starting data
    */
   const tailer = tail(program.args, {
-    buffer: program.number
+    buffer: program.number,
+    remote: program.server,
+    f: '/var/log/syslog'
+  });
+
+  const tailer2 = tail(program.args, {
+    buffer: program.number,
+    remote: program.server,
+    f: '/var/log/upstart/consul.log'
   });
 
   const filesSocket = io.of(`/${filesNamespace}`).on('connection', (socket) => {
     socket.emit('options:lines', program.lines);
+    console.log(filesNamespace);
 
     if (program.uiHideTopbar) {
       socket.emit('options:hide-topbar');
@@ -143,12 +152,34 @@ if (program.daemonize) {
       socket.emit('line', line);
     });
   });
+  
+  const filesSocket2 = io.of('/consul').on('connection', (socket) => {
+    socket.emit('options:lines', program.lines);
 
+    if (program.uiHideTopbar) {
+      socket.emit('options:hide-topbar');
+    }
+
+    if (!program.uiIndent) {
+      socket.emit('options:no-indent');
+    }
+
+    if (program.uiHighlight) {
+      socket.emit('options:highlightConfig', highlightConfig);
+    }
+
+    tailer2.getBuffer().forEach((line) => {
+      socket.emit('line', line);
+    });
+  });
   /**
    * Send incoming data
    */
   tailer.on('line', (line) => {
     filesSocket.emit('line', line);
+  });
+  tailer2.on('line', (line) => {
+    filesSocket2.emit('line', line);
   });
 
   stats.track('runtime', 'started');
